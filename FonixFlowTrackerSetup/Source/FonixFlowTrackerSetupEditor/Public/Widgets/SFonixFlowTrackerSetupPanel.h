@@ -43,7 +43,9 @@ public:
 private:
 	// State
 	ETrackingProtocol SelectedProtocol = ETrackingProtocol::FreeD;
-	FString LocalIPAddress;
+	TArray<TSharedPtr<FString>> LANAdapterIPs;
+	TSharedPtr<FString> SelectedLANIP;
+	TSharedPtr<SComboBox<TSharedPtr<FString>>> IPComboBox;
 	int32 ListeningPort = 40000;
 	FString SubjectName = TEXT("Camera");
 
@@ -124,7 +126,7 @@ private:
 	void CaptureZoomTele();
 	void ApplyCalibration();
 
-	void DetectLocalIP();
+	void EnumerateLANAdapters();
 	void AddLog(const FString& Message);
 	void PollLiveLinkData();
 	void StopLiveLinkPolling();
@@ -135,7 +137,7 @@ private:
 	void OnCameraSelected(TWeakObjectPtr<ACineCameraActor> InItem, ESelectInfo::Type SelectInfo);
 
 	// Queries
-	FText GetIPAddressText() const;
+
 	FText GetFocusMinText() const;
 	FText GetFocusMaxText() const;
 	FText GetZoomWideText() const;

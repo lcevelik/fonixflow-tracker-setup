@@ -36,6 +36,14 @@
 #include "Styling/AppStyle.h"
 #include "SocketSubsystem.h"
 #include "Interfaces/IPv4/IPv4Address.h"
+#if PLATFORM_WINDOWS
+#include "Windows/AllowWindowsPlatformTypes.h"
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#include <iphlpapi.h>
+#include "Windows/HideWindowsPlatformTypes.h"
+#pragma comment(lib, "iphlpapi.lib")
+#endif
 #include "TimerManager.h"
 #include "LiveLinkFreeDSourceSettings.h"
 
@@ -47,7 +55,7 @@
 
 void SFonixFlowTrackerSetupPanel::Construct(const FArguments& InArgs)
 {
-	DetectLocalIP();
+	EnumerateLANAdapters();
 	RefreshCameraList();
 
 	ChildSlot
@@ -529,13 +537,27 @@ TSharedRef<SWidget> SFonixFlowTrackerSetupPanel::BuildNetworkSection()
 
 	+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
 	[
-		SNew(STextBlock)
-		.Text_Lambda([this]() -> FText
+		SAssignNew(IPComboBox, SComboBox<TSharedPtr<FString>>)
+		.OptionsSource(&LANAdapterIPs)
+		.OnGenerateWidget_Lambda([](TSharedPtr<FString> Item) -> TSharedRef<SWidget>
 		{
-			return FText::FromString(FString::Printf(TEXT("%s : %d"), *LocalIPAddress, ListeningPort));
+			return SNew(STextBlock)
+				.Text(FText::FromString(Item.IsValid() ? *Item : TEXT("")))
+				.Font(FCoreStyle::GetDefaultFontStyle("Mono", 10));
 		})
-		.Font(FCoreStyle::GetDefaultFontStyle("Mono", 10))
-		.ColorAndOpacity(FSlateColor(FLinearColor(0.8f, 0.8f, 0.8f)))
+		.OnSelectionChanged_Lambda([this](TSharedPtr<FString> Item, ESelectInfo::Type)
+		{
+			if (Item.IsValid()) SelectedLANIP = Item;
+		})
+		[
+			SNew(STextBlock)
+			.Text_Lambda([this]() -> FText
+			{
+				return FText::FromString(SelectedLANIP.IsValid() ? *SelectedLANIP : TEXT("No LAN adapter found"));
+			})
+			.Font(FCoreStyle::GetDefaultFontStyle("Mono", 10))
+			.ColorAndOpacity(FSlateColor(FLinearColor(0.8f, 0.8f, 0.8f)))
+		]
 	]
 
 	+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(4, 0, 0, 0)
@@ -544,7 +566,7 @@ TSharedRef<SWidget> SFonixFlowTrackerSetupPanel::BuildNetworkSection()
 		.Text(LOCTEXT("RefreshIP", "Refresh"))
 		.ButtonStyle(FAppStyle::Get(), "FlatButton.Default")
 		.TextStyle(FAppStyle::Get(), "SmallText")
-		.OnClicked_Lambda([this]() -> FReply { DetectLocalIP(); return FReply::Handled(); })
+		.OnClicked_Lambda([this]() -> FReply { EnumerateLANAdapters(); return FReply::Handled(); })
 	];
 }
 
@@ -775,15 +797,80 @@ TSharedRef<SWidget> SFonixFlowTrackerSetupPanel::BuildCalibrationSection()
 // ACTIONS
 // ═════════════════════════════════════════════════════════════════════
 
-void SFonixFlowTrackerSetupPanel::DetectLocalIP()
+void SFonixFlowTrackerSetupPanel::EnumerateLANAdapters()
 {
-	LocalIPAddress = TEXT("127.0.0.1");
-	bool bCanBindAll = false;
-	TSharedPtr<FInternetAddr> Addr = ISocketSubsystem::Get(PLATFORM_SOCKETSUBSYSTEM)->GetLocalHostAddr(*GLog, bCanBindAll);
-	if (Addr.IsValid())
+	LANAdapterIPs.Empty();
+	SelectedLANIP.Reset();
+
+#if PLATFORM_WINDOWS
+	// Virtual adapter description substrings to exclude
+	static const TCHAR* VirtualKeywords[] = {
+		TEXT("Virtual"), TEXT("VMware"), TEXT("VirtualBox"), TEXT("Hyper-V"),
+		TEXT("TAP"), TEXT("Loopback"), TEXT("Bluetooth"), TEXT("vEthernet"),
+		TEXT("Miniport"), TEXT("WAN"), TEXT("Tunnel"), TEXT("6to4"), TEXT("Teredo")
+	};
+
+	ULONG BufLen = 15 * 1024;
+	TArray<uint8> Buf;
+	Buf.SetNumUninitialized(BufLen);
+	ULONG Flags = GAA_FLAG_SKIP_ANYCAST | GAA_FLAG_SKIP_MULTICAST | GAA_FLAG_SKIP_DNS_SERVER;
+	ULONG Ret = GetAdaptersAddresses(AF_INET, Flags, nullptr, reinterpret_cast<PIP_ADAPTER_ADDRESSES>(Buf.GetData()), &BufLen);
+	if (Ret == ERROR_BUFFER_OVERFLOW)
 	{
-		FString ResolvedIP = Addr->ToString(false);
-		if (!ResolvedIP.IsEmpty() && ResolvedIP != TEXT("0.0.0.0")) LocalIPAddress = ResolvedIP;
+		Buf.SetNumUninitialized(BufLen);
+		Ret = GetAdaptersAddresses(AF_INET, Flags, nullptr, reinterpret_cast<PIP_ADAPTER_ADDRESSES>(Buf.GetData()), &BufLen);
+	}
+
+	if (Ret == NO_ERROR)
+	{
+		for (PIP_ADAPTER_ADDRESSES Adapter = reinterpret_cast<PIP_ADAPTER_ADDRESSES>(Buf.GetData());
+			 Adapter != nullptr; Adapter = Adapter->Next)
+		{
+			// Wired Ethernet only
+			if (Adapter->IfType != IF_TYPE_ETHERNET_CSMACD) continue;
+			if (Adapter->OperStatus != IfOperStatusUp) continue;
+
+			// Skip virtual adapters by description
+			FString Desc = FString(Adapter->Description);
+			bool bVirtual = false;
+			for (const TCHAR* Kw : VirtualKeywords)
+			{
+				if (Desc.Contains(Kw, ESearchCase::IgnoreCase)) { bVirtual = true; break; }
+			}
+			if (bVirtual) continue;
+
+			for (PIP_ADAPTER_UNICAST_ADDRESS UA = Adapter->FirstUnicastAddress; UA != nullptr; UA = UA->Next)
+			{
+				sockaddr_in* SA = reinterpret_cast<sockaddr_in*>(UA->Address.lpSockaddr);
+				char Buf4[INET_ADDRSTRLEN];
+				inet_ntop(AF_INET, &SA->sin_addr, Buf4, sizeof(Buf4));
+				LANAdapterIPs.Add(MakeShared<FString>(FString(Buf4)));
+			}
+		}
+	}
+#endif
+
+	if (LANAdapterIPs.Num() == 0)
+	{
+		// Fallback: use Unreal's socket subsystem
+		bool bCanBindAll = false;
+		TSharedPtr<FInternetAddr> Addr = ISocketSubsystem::Get(PLATFORM_SOCKETSUBSYSTEM)->GetLocalHostAddr(*GLog, bCanBindAll);
+		if (Addr.IsValid())
+		{
+			FString IP = Addr->ToString(false);
+			if (!IP.IsEmpty() && IP != TEXT("0.0.0.0"))
+				LANAdapterIPs.Add(MakeShared<FString>(IP));
+		}
+		if (LANAdapterIPs.Num() == 0)
+			LANAdapterIPs.Add(MakeShared<FString>(TEXT("127.0.0.1")));
+	}
+
+	SelectedLANIP = LANAdapterIPs[0];
+
+	if (IPComboBox.IsValid())
+	{
+		IPComboBox->RefreshOptions();
+		IPComboBox->SetSelectedItem(SelectedLANIP);
 	}
 }
 
@@ -1289,7 +1376,6 @@ void SFonixFlowTrackerSetupPanel::ApplyCalibration()
 
 // ═════════════════════════════════════════════════════════════════════
 
-FText SFonixFlowTrackerSetupPanel::GetIPAddressText() const { return FText::FromString(LocalIPAddress); }
 
 FText SFonixFlowTrackerSetupPanel::GetFocusMinText() const
 {
@@ -1371,7 +1457,7 @@ FFonixFlowTrackerState SFonixFlowTrackerSetupPanel::GetState() const
 
 	// Protocol
 	State.Protocol = (SelectedProtocol == ETrackingProtocol::FreeD) ? TEXT("FreeD") : TEXT("OpenTrackIO");
-	State.IPAddress = LocalIPAddress;
+	State.IPAddress = TEXT("0.0.0.0");
 	State.Port = ListeningPort;
 
 	// Lens
