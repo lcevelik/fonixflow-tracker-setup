@@ -38,7 +38,7 @@ Automates the entire Live Link camera tracking pipeline in one compact dockable 
 
 The panel uses a compact **2-tab layout** (~350 px wide, no scrolling needed):
 
-- **Camera Setup tab** — Camera picker, Lens type, Protocol, Network IP, SETUP NOW button
+- **Camera Setup tab** — Camera picker, Lens type, Protocol, Network IP selector, SETUP NOW button
 - **Calibration tab** — Live Focus/Zoom readout, Near/Far/Wide/Tele capture rows, APPLY CALIBRATION button, APPLY LENS FILE button (appears after first calibration)
 
 Active tab is highlighted. Log accordion is removed from the UI — check the log file instead.
@@ -51,7 +51,7 @@ Active tab is highlighted. Log accordion is removed from the UI — check the lo
 - **Focus distance range** — near/far in cm captured from live encoder
 - **Calibration** — capture actual encoder values, auto-sets FreeD UseManualRange
 - **Camera picker** — lists all CineCameraActors in the level, refresh button
-- **Network display** — shows your IP:port for FreeD device configuration
+- **LAN adapter selector** — dropdown shows all connected wired Ethernet adapters (Wi-Fi and virtual adapters excluded), so you know the correct IP to configure on your tracking device
 - **FF toolbar icon** — blue square with white FF letters in the Level Editor toolbar
 - **Active tab highlight** — darker background on the selected tab
 - **Apply Lens File** — re-runs calibration on next session without re-capturing
@@ -92,8 +92,8 @@ FonixFlowTrackerSetup/
 |--------|--------|-----------------|
 | UE 5.5 | Builds and runs — all APIs verified | ✅ Win64 ZIP |
 | UE 5.6 | Builds and runs | ✅ Win64 ZIP |
-| UE 5.7 | Builds and runs (`GetObjectsOfClass` replaces `TObjectIterator` for C++20) | ✅ Win64 ZIP |
-| UE 5.8 | Builds and runs — all APIs verified against 5.8 documentation | Source only |
+| UE 5.7 | Builds and runs | ✅ Win64 ZIP |
+| UE 5.8 | Builds and runs — all APIs verified | ✅ Win64 ZIP |
 | UE 5.4 and below | Not tested | — |
 
 ## License

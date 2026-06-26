@@ -168,8 +168,7 @@ ssh f@10.0.0.18 "\"D:\\UE_Engine\\UE_5.6\\Engine\\Build\\BatchFiles\\Build.bat\"
 
 ## Current State
 
-- **Version**: 1.0.0
-- **Status**: Builds clean (25/25 actions, 60s full rebuild)
-- **Deployed to**: `F:\Unreal Projects\AbelCineDemo\Plugins\FonixFlowTrackerSetup\`
-- **GitHub**: `lcevelik/tracking-auto-setup` (main branch)
+- **Version**: 1.4.0
+- **Status**: Builds clean for UE 5.5, 5.6, 5.7, 5.8 — pre-built Win64 ZIPs on GitHub Releases
+- **GitHub**: `lcevelik/fonixflow-tracker-setup` (main branch)
 - **Next**: Runtime testing in UE Editor — verify full flow end-to-end

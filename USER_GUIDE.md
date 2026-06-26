@@ -7,7 +7,7 @@ For camera operators and technicians setting up FreeD lens tracking in Unreal En
 ## Before You Start
 
 **What you need:**
-- A FreeD tracking device (e.g. Mosys, stYpe, Ncam, EZtrack) connected to the same network
+- A FreeD tracking device (e.g. Mosys, stYpe, Ncam, EZtrack) connected to the same network via **wired Ethernet**
 - The device configured to send UDP data to **port 40000** on your machine's IP
 - A CineCameraActor in the UE level representing your physical camera
 - The plugin installed and enabled (Edit > Plugins > FonixFlow Tracker Setup)
@@ -46,12 +46,13 @@ Select **FreeD 3D** (the default — covers all FreeD-compatible trackers).
 OpenTrack IO is listed but not yet implemented.
 
 ### NETWORK
-Shows your machine's IP address and the listening port (40000).
-This is the address you configure on the tracking device.
+Shows a dropdown of all **wired Ethernet adapters** currently connected on your machine. Wi-Fi and virtual adapters (VMware, Hyper-V, VirtualBox, TAP, etc.) are automatically excluded.
 
-> **Configure your tracker to send UDP to `<shown IP>:40000`**
+The selected IP and port (40000) is the address you configure on your tracking device.
 
-If the IP is wrong (multi-NIC machine), click **Refresh** to re-detect.
+> **Configure your tracker to send UDP to `<selected IP>:40000`**
+
+If your adapter isn't listed, click **Refresh** to re-detect. The plugin listens on all interfaces (`0.0.0.0`) so tracking works regardless of which adapter you select — the dropdown is there to help you identify the right IP for your device configuration.
 
 ### SETUP NOW
 Click **SETUP NOW** when the camera and lens are configured.
@@ -126,6 +127,8 @@ This runs the same apply step without overwriting your captured values.
 | Plugin not visible in toolbar | Edit > Plugins > FonixFlow Tracker Setup > Enable, restart editor |
 | Log shows "No LiveLink controller" | Run SETUP NOW before APPLY CALIBRATION |
 | Editor restart prompt after SETUP NOW | ICVFX or LiveLinkLens was just enabled — restart, then run SETUP NOW again |
+| No adapters in NETWORK dropdown | Click Refresh; if still empty the plugin falls back to the system default IP |
+| Wrong IP shown in dropdown | Select the correct adapter from the list; Wi-Fi and virtual adapters are hidden by design |
 
 **Log file:** `<ProjectDir>/Saved/Logs/FonixFlowTracker.log`
 Every step the plugin takes is written there with a timestamp.
@@ -150,7 +153,8 @@ Open panel (FF toolbar button)
   └─ Camera Setup tab
        ├─ Select camera
        ├─ Set lens type + focal length
-       ├─ Verify network IP matches tracker config
+       ├─ Select your LAN adapter IP in the NETWORK dropdown
+       ├─ Configure tracker to send to <that IP>:40000
        └─ Click SETUP NOW
             └─ Calibration tab (auto-switch)
                  ├─ Verify live focus/zoom values are updating
